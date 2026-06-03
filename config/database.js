@@ -13,7 +13,7 @@ const mysqlPool = mysql2.createPool({
   waitForConnections: true,
   connectionLimit:    10,
   queueLimit:         0,
-  timezone:           '-03:00',
+  timezone:           '+00:00', // MySQL Hostinger opera em UTC — NÃO alterar
 });
 
 async function testMySQL() {

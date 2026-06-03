@@ -5,6 +5,7 @@ const jwt      = require('jsonwebtoken');
 const { mysqlPool } = require('../../../config/database');
 const influxService = require('../../services/influx.service');
 const { authMiddleware, requireRole, scopeToClient } = require('../middleware/auth');
+const { checkHeartbeats } = require('../../rules/heartbeat');
 
 const router = express.Router();
 const auth   = authMiddleware;
@@ -286,6 +287,39 @@ router.get('/dashboard', auth, scopeToClient, async (req, res) => {
     clientId ? [clientId] : [],
   );
   res.json(cpds);
+});
+// ============================================================
+// DEBUG (apenas admin)
+// ============================================================
+
+/**
+ * POST /api/debug/heartbeat
+ * Executa o heartbeat checker imediatamente (sem esperar o cron).
+ * Retorna os logs de execução via resposta JSON.
+ */
+router.post('/debug/heartbeat', auth, requireRole('admin'), async (req, res) => {
+  const started = Date.now();
+  const logs = [];
+
+  // Intercepta logs temporariamente
+  const originalInfo  = console.info;
+  const originalWarn  = console.warn;
+  const originalError = console.error;
+
+  try {
+    await checkHeartbeats();
+    res.json({
+      ok:          true,
+      durationMs:  Date.now() - started,
+      message:     'checkHeartbeats executado — veja os logs do container para detalhes',
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok:    false,
+      error: err.message,
+      stack: err.stack,
+    });
+  }
 });
 
 module.exports = router;

@@ -27,26 +27,38 @@ function start() {
 async function checkHeartbeats() {
   const devices = await deviceModel.findAllActiveWithCpd();
 
+  logger.info(`Heartbeat: verificando ${devices.length} device(s)`);
+
   for (const device of devices) {
     const { device_id, device_name, cpd_id, cpd_name, client_id, last_seen_at, heartbeat_timeout_sec } = device;
 
     if (!last_seen_at) {
-      // Device nunca enviou dados — não alerta ainda, aguarda primeiro envio
+      logger.info('Heartbeat: device sem last_seen_at, ignorando', { deviceId: device_id, deviceName: device_name });
       continue;
     }
 
-    const secondsSinceLastSeen = (Date.now() - new Date(last_seen_at).getTime()) / 1000;
-    const isOffline = secondsSinceLastSeen > heartbeat_timeout_sec;
+    const lastSeenMs = new Date(last_seen_at).getTime();
+    const nowMs      = Date.now();
+    const secondsSinceLastSeen = (nowMs - lastSeenMs) / 1000;
+    const isOffline  = secondsSinceLastSeen > heartbeat_timeout_sec;
+
+    logger.info('Heartbeat: status do device', {
+      deviceId:     device_id,
+      deviceName:   device_name,
+      lastSeenAt:   last_seen_at,
+      secondsSince: Math.round(secondsSinceLastSeen),
+      timeoutSec:   heartbeat_timeout_sec,
+      isOffline,
+    });
 
     if (isOffline) {
-      logger.warn('Heartbeat: device offline', {
+      logger.warn('Heartbeat: device OFFLINE — disparando comm_failure', {
         deviceId: device_id, deviceName: device_name,
         cpdId: cpd_id, secondsSince: Math.round(secondsSinceLastSeen),
       });
 
       await triggerCommFailure({ device, secondsSinceLastSeen });
     } else {
-      // Device está online — resolve alerta de falha se existia
       await resolveCommFailure(cpd_id, device_id, cpd_name, client_id);
     }
   }
@@ -57,7 +69,10 @@ async function triggerCommFailure({ device, secondsSinceLastSeen }) {
 
   // Evita duplicar evento se já existe um aberto
   const existing = await alertModel.findOpenEvent(cpd_id, 'comm_failure');
-  if (existing) return; // já notificado
+  if (existing) {
+    logger.info('Heartbeat: comm_failure já registrado, ignorando duplicata', { cpdId: cpd_id, eventId: existing.id });
+    return;
+  }
 
   // Busca nome do cliente
   const [clientRows] = await mysqlPool.query(
@@ -78,30 +93,53 @@ async function triggerCommFailure({ device, secondsSinceLastSeen }) {
     message,
   });
 
+  logger.warn('Heartbeat: evento comm_failure criado', { eventId, cpdId: cpd_id, deviceId: device_id });
+
   // Busca subscriptions para comm_failure
   const subscriptions = await alertModel.findEligibleSubscriptions(cpd_id, 'comm_failure', 'critical');
 
-  const cpd = { cpd_name, client_name: clientName };
+  logger.info('Heartbeat: subscriptions elegíveis para comm_failure', {
+    cpdId: cpd_id,
+    total: subscriptions.length,
+    contacts: subscriptions.map(s => s.contact_name),
+  });
+
+  if (!subscriptions.length) {
+    logger.warn('Heartbeat: nenhuma subscription encontrada para comm_failure — ninguém será notificado', { cpdId: cpd_id });
+    return;
+  }
 
   for (const sub of subscriptions) {
     const destination = sub.channel === 'email' ? sub.email : sub.whatsapp;
-    if (!destination) continue;
+    if (!destination) {
+      logger.warn('Heartbeat: contato sem número/email configurado', { contactId: sub.contact_id, contactName: sub.contact_name });
+      continue;
+    }
 
     const recent = await alertModel.findRecentDispatch(sub.contact_id, 'comm_failure', sub.cooldown_minutes);
-    if (recent) continue;
+    if (recent) {
+      logger.info('Heartbeat: cooldown ativo para contato', { contactId: sub.contact_id, cooldown: sub.cooldown_minutes });
+      continue;
+    }
+
+    const channel = sub.channel === 'both' ? 'whatsapp' : sub.channel;
 
     const dispatchId = await alertModel.createDispatch({
       alertEventId:   eventId,
       contactId:      sub.contact_id,
       subscriptionId: sub.subscription_id,
-      channel:        sub.channel === 'both' ? 'whatsapp' : sub.channel,
+      channel,
       destination,
       status:         'pending',
     });
 
+    logger.info('Heartbeat: disparando webhook comm_failure', {
+      dispatchId, contactName: sub.contact_name, channel, destination,
+    });
+
     await webhookService.send({
       dispatchId,
-      channel:     sub.channel === 'both' ? 'whatsapp' : sub.channel,
+      channel,
       destination,
       alertType:   'comm_failure',
       severity:    'critical',
@@ -164,4 +202,4 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
   }
 }
 
-module.exports = { start };
+module.exports = { start, checkHeartbeats };
