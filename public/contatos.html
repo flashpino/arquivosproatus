@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CPD Monitor | Contatos</title>
+  <script>if (!localStorage.getItem('cpd_token')) { document.documentElement.style.display='none'; location.replace('/login.html'); }</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        colors: {
+          primary: '#2563eb',
+          'industrial-gray': { 50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a' },
+          'hmi-green':'#16a34a','hmi-yellow':'#ca8a04','hmi-red':'#dc2626',
+        },
+        fontFamily: { display:['Inter','sans-serif'], mono:['JetBrains Mono','monospace'] },
+      }}
+    }
+  </script>
+  <link rel="stylesheet" href="/css/app.css"/>
+</head>
+<body class="font-display min-h-screen grid-bg" style="background:#f1f5f9;color:#1e293b">
+  <div class="flex flex-col min-h-screen">
+    <div id="site-header"></div>
+
+    <main class="p-6 space-y-4 max-w-screen-2xl mx-auto w-full flex-1">
+
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold uppercase tracking-widest flex items-center gap-2" style="color:#1e293b">
+          <span class="material-symbols-outlined text-sm" style="color:#2563eb">contacts</span> Gerenciar Contatos e Alertas
+        </h3>
+        <button onclick="openNewModal()"
+                class="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold uppercase tracking-widest text-white shadow-sm"
+                style="background:#2563eb">
+          <span class="material-symbols-outlined text-sm">add</span> Novo Contato
+        </button>
+      </div>
+
+      <div class="bg-white border rounded shadow-sm overflow-hidden" style="border-color:#cbd5e1">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+              <th class="p-4" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">ID</th>
+              <th class="p-4" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Nome</th>
+              <th class="p-4" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Cliente</th>
+              <th class="p-4" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">WhatsApp</th>
+              <th class="p-4" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">E-mail</th>
+              <th class="p-4" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Assinaturas</th>
+              <th class="p-4" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Status</th>
+              <th class="p-4 text-right" style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="contacts-tbody" class="text-sm divide-y" style="divide-color:#e2e8f0">
+            <tr><td colspan="8" class="p-8 text-center text-sm" style="color:#94a3b8">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <footer class="border-t p-4 mt-auto" style="border-color:#e2e8f0;background:#fff">
+      <div class="flex justify-between items-center max-w-screen-2xl mx-auto" style="color:#94a3b8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em">
+        <span>&copy; <span id="year"></span> CPD Monitor</span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:11px">terminal</span> Admin v1.0</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ═══ Modal Contato (criar / editar info básica) ════════ -->
+  <div id="modal-contact" class="modal-overlay hidden">
+    <div class="modal-box modal-box-lg p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h4 class="text-sm font-bold uppercase tracking-widest" style="color:#1e293b" id="modal-contact-title">Novo Contato</h4>
+        <button onclick="closeModal('modal-contact')" style="color:#94a3b8">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <form id="contact-form" onsubmit="handleSaveContact(event)" class="space-y-5">
+        <input type="hidden" id="contact-id"/>
+
+        <!-- Dados do contato -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Cliente *</label>
+            <select id="contact-client-id" required class="input-premium" onchange="onClientChange()">
+              <option value="">Selecione o cliente…</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Nome Completo *</label>
+            <input type="text" id="contact-name" required class="input-premium" placeholder="Ex: João da Silva"/>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">WhatsApp</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm" style="color:#94a3b8">phone</span>
+              <input type="text" id="contact-whatsapp" class="input-premium pl-9" placeholder="5511999990001"/>
+            </div>
+            <p class="text-xs mt-1" style="color:#94a3b8">Com DDI: 55 11 9 9999-0001</p>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">E-mail</label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm" style="color:#94a3b8">mail</span>
+              <input type="email" id="contact-email" class="input-premium pl-9" placeholder="joao@empresa.com"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- Assinaturas de alertas -->
+        <div class="pt-3" style="border-top:1px solid #e2e8f0">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-xs font-bold uppercase tracking-widest flex items-center gap-1" style="color:#334155">
+              <span class="material-symbols-outlined text-sm">notifications</span> Assinaturas de Alertas
+            </p>
+            <button type="button" onclick="addSubscription()"
+                    class="flex items-center gap-1 px-3 py-1 rounded text-xs font-bold uppercase tracking-widest"
+                    style="background:#dbeafe;color:#1d4ed8">
+              <span class="material-symbols-outlined" style="font-size:14px">add</span> Adicionar
+            </button>
+          </div>
+
+          <div id="subscriptions-list" class="space-y-3">
+            <!-- Subscriptions are injected here -->
+          </div>
+
+          <div id="no-subs-msg" class="text-xs text-center p-4" style="color:#94a3b8">
+            Nenhuma assinatura. Clique em "Adicionar" para configurar quais alertas este contato recebe.
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2" style="border-top:1px solid #f1f5f9">
+          <button type="button" onclick="closeModal('modal-contact')"
+                  class="px-4 py-2 rounded text-xs font-bold uppercase tracking-widest"
+                  style="background:#f1f5f9;color:#475569">Cancelar</button>
+          <button type="submit" id="contact-save-btn"
+                  class="flex items-center gap-2 px-5 py-2 rounded text-xs font-bold uppercase tracking-widest text-white shadow-sm"
+                  style="background:#2563eb">
+            <span class="material-symbols-outlined text-sm">save</span> Salvar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/layout.js"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    let contacts = [], clientsList = [], cpdsList = [];
+    let subCount = 0;
+
+    const ALERT_TYPES = [
+      { value:'all',            label:'Todos os tipos'           },
+      { value:'temp_high',      label:'Temperatura alta'         },
+      { value:'temp_low',       label:'Temperatura baixa'        },
+      { value:'humidity_high',  label:'Umidade alta'             },
+      { value:'humidity_low',   label:'Umidade baixa'            },
+      { value:'comm_failure',   label:'Falha de comunicação'     },
+      { value:'comm_restored',  label:'Comunicação restaurada'   },
+    ];
+    const SEVERITY = [
+      { value:'info',     label:'Info (mínima)' },
+      { value:'warning',  label:'Aviso'         },
+      { value:'critical', label:'Crítico'        },
+    ];
+    const CHANNELS = [
+      { value:'whatsapp', label:'WhatsApp'        },
+      { value:'email',    label:'E-mail'           },
+      { value:'both',     label:'WhatsApp + E-mail'},
+    ];
+    const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+    function rowHtml(c, idx) {
+      const subs = Array.isArray(c.subscriptions) ? c.subscriptions.filter(s => s && s.id) : [];
+      return `
+        <tr class="staggered-row hover-glow-row" style="animation-delay:${idx*0.035}s">
+          <td class="p-4 font-mono text-xs" style="color:#64748b">${c.id}</td>
+          <td class="p-4 font-bold" style="color:#1e293b">${c.name}</td>
+          <td class="p-4 text-xs" style="color:#64748b">${c.client_id}</td>
+          <td class="p-4 font-mono text-xs" style="color:#475569">${c.whatsapp || '—'}</td>
+          <td class="p-4 text-xs" style="color:#64748b">${c.email || '—'}</td>
+          <td class="p-4">
+            <span class="digital-font text-xs font-bold px-2 py-0.5 rounded"
+                  style="background:#f1f5f9;color:#475569">${subs.length} assinatura${subs.length !== 1 ? 's' : ''}</span>
+          </td>
+          <td class="p-4">${activeBadge(c.active)}</td>
+          <td class="p-4 text-right">
+            <div class="flex items-center justify-end gap-2">
+              <button onclick="openEditModal(${c.id})" class="p-1 transition-colors" style="color:#94a3b8" title="Editar">
+                <span class="material-symbols-outlined text-sm">edit</span>
+              </button>
+              <button onclick="deleteContact(${c.id})" class="p-1 transition-colors" style="color:#94a3b8" title="Remover">
+                <span class="material-symbols-outlined text-sm">delete</span>
+              </button>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    function getCpdsForClient(clientId) {
+      return cpdsList.filter(c => c.client_id == clientId && c.active);
+    }
+
+    function subHtml(idx, sub = {}) {
+      const cpdsForClient = getCpdsForClient(document.getElementById('contact-client-id').value);
+      const cpdOptions = `<option value="">Todos os CPDs do cliente</option>` +
+        cpdsForClient.map(c => `<option value="${c.id}" ${c.id == sub.cpd_id ? 'selected' : ''}>${c.name}</option>`).join('');
+
+      const alertOptions = ALERT_TYPES.map(a =>
+        `<option value="${a.value}" ${(sub.alert_type||'all') === a.value ? 'selected':''}>${a.label}</option>`).join('');
+      const chanOptions  = CHANNELS.map(c =>
+        `<option value="${c.value}" ${(sub.channel||'whatsapp') === c.value ? 'selected':''}>${c.label}</option>`).join('');
+      const sevOptions   = SEVERITY.map(s =>
+        `<option value="${s.value}" ${(sub.severity_min||'warning') === s.value ? 'selected':''}>${s.label}</option>`).join('');
+
+      // Weekdays bitmask → checkboxes
+      const mask = sub.weekdays_mask ?? 127;
+      const dayBoxes = WEEKDAYS.map((d, i) =>
+        `<label class="flex flex-col items-center gap-1 cursor-pointer">
+          <input type="checkbox" class="sub-weekday" data-idx="${idx}" data-bit="${i}" ${mask & (1<<i) ? 'checked':''}>
+          <span class="text-xs" style="color:#475569">${d}</span>
+        </label>`
+      ).join('');
+
+      return `
+        <div class="sub-card" id="sub-${idx}">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold uppercase tracking-widest" style="color:#334155">Assinatura #${idx+1}</span>
+            <button type="button" onclick="removeSubscription(${idx})" style="color:#dc2626">
+              <span class="material-symbols-outlined" style="font-size:16px">delete</span>
+            </button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">CPD / Local</label>
+              <select class="input-premium sub-cpd" data-idx="${idx}">${cpdOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Tipo de Alerta</label>
+              <select class="input-premium sub-alert-type" data-idx="${idx}">${alertOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Canal</label>
+              <select class="input-premium sub-channel" data-idx="${idx}">${chanOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Severidade mínima</label>
+              <select class="input-premium sub-severity" data-idx="${idx}">${sevOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Horário: de</label>
+              <input type="time" class="input-premium sub-time-from" data-idx="${idx}" value="${sub.time_from ? sub.time_from.slice(0,5) : '00:00'}"/>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Horário: até</label>
+              <input type="time" class="input-premium sub-time-to" data-idx="${idx}" value="${sub.time_to ? sub.time_to.slice(0,5) : '23:59'}"/>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Cooldown (min)</label>
+              <input type="number" class="input-premium sub-cooldown" data-idx="${idx}" value="${sub.cooldown_minutes ?? 30}" min="1"/>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest mb-1" style="color:#475569">Dias da semana</label>
+              <div class="flex gap-2 flex-wrap pt-1">${dayBoxes}</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderSubscriptions(subs = []) {
+      subCount = subs.length;
+      const list = document.getElementById('subscriptions-list');
+      const msg  = document.getElementById('no-subs-msg');
+      if (!subs.length) {
+        list.innerHTML = '';
+        msg.style.display = '';
+      } else {
+        msg.style.display = 'none';
+        list.innerHTML = subs.map((s, i) => subHtml(i, s)).join('');
+      }
+    }
+
+    function addSubscription() {
+      const list = document.getElementById('subscriptions-list');
+      const msg  = document.getElementById('no-subs-msg');
+      msg.style.display = 'none';
+      list.insertAdjacentHTML('beforeend', subHtml(subCount));
+      subCount++;
+    }
+
+    function removeSubscription(idx) {
+      document.getElementById('sub-' + idx)?.remove();
+      const list = document.getElementById('subscriptions-list');
+      if (!list.children.length) document.getElementById('no-subs-msg').style.display = '';
+    }
+
+    function collectSubscriptions() {
+      const subs = [];
+      document.querySelectorAll('#subscriptions-list .sub-card').forEach(card => {
+        const idx = card.id.replace('sub-', '');
+        let mask = 0;
+        card.querySelectorAll('.sub-weekday').forEach(cb => {
+          if (cb.checked) mask |= (1 << parseInt(cb.dataset.bit));
+        });
+        subs.push({
+          cpd_id:           card.querySelector('.sub-cpd').value  || null,
+          alert_type:       card.querySelector('.sub-alert-type').value,
+          channel:          card.querySelector('.sub-channel').value,
+          severity_min:     card.querySelector('.sub-severity').value,
+          time_from:        card.querySelector('.sub-time-from').value + ':00',
+          time_to:          card.querySelector('.sub-time-to').value + ':00',
+          cooldown_minutes: parseInt(card.querySelector('.sub-cooldown').value) || 30,
+          weekdays_mask:    mask,
+        });
+      });
+      return subs;
+    }
+
+    function populateClientSelect(selectedId = '') {
+      const sel = document.getElementById('contact-client-id');
+      sel.innerHTML = '<option value="">Selecione o cliente…</option>' +
+        clientsList.map(c => `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.name}</option>`).join('');
+    }
+
+    function onClientChange() {
+      // Refresh CPD options in existing subscription cards
+      const clientId = document.getElementById('contact-client-id').value;
+      const cpds = getCpdsForClient(clientId);
+      document.querySelectorAll('.sub-cpd').forEach(sel => {
+        const current = sel.value;
+        sel.innerHTML = `<option value="">Todos os CPDs do cliente</option>` +
+          cpds.map(c => `<option value="${c.id}" ${c.id == current ? 'selected':''}>${c.name}</option>`).join('');
+      });
+    }
+
+    async function loadData() {
+      try {
+        [contacts, clientsList, cpdsList] = await Promise.all([
+          api.getContacts(),
+          api.getClients(),
+          api.getCpds(),
+        ]);
+        const tbody = document.getElementById('contacts-tbody');
+        tbody.innerHTML = contacts.length
+          ? contacts.map((c, i) => rowHtml(c, i)).join('')
+          : `<tr><td colspan="8" class="p-8 text-center text-sm" style="color:#94a3b8">Nenhum contato cadastrado.</td></tr>`;
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function openNewModal() {
+      document.getElementById('modal-contact-title').textContent = 'Novo Contato';
+      document.getElementById('contact-id').value       = '';
+      document.getElementById('contact-name').value     = '';
+      document.getElementById('contact-whatsapp').value = '';
+      document.getElementById('contact-email').value    = '';
+      populateClientSelect();
+      renderSubscriptions([]);
+      openModal('modal-contact');
+    }
+
+    function openEditModal(id) {
+      const c = contacts.find(x => x.id === id);
+      if (!c) return;
+      document.getElementById('modal-contact-title').textContent = 'Editar Contato';
+      document.getElementById('contact-id').value       = c.id;
+      document.getElementById('contact-name').value     = c.name || '';
+      document.getElementById('contact-whatsapp').value = c.whatsapp || '';
+      document.getElementById('contact-email').value    = c.email || '';
+      populateClientSelect(c.client_id);
+
+      const subs = Array.isArray(c.subscriptions) ? c.subscriptions.filter(s => s && s.id) : [];
+      renderSubscriptions(subs);
+      openModal('modal-contact');
+    }
+
+    async function handleSaveContact(e) {
+      e.preventDefault();
+      const id  = document.getElementById('contact-id').value;
+      const btn = document.getElementById('contact-save-btn');
+      btn.disabled = true;
+
+      const payload = {
+        client_id:   parseInt(document.getElementById('contact-client-id').value),
+        name:        document.getElementById('contact-name').value.trim(),
+        whatsapp:    document.getElementById('contact-whatsapp').value.trim() || null,
+        email:       document.getElementById('contact-email').value.trim() || null,
+        subscriptions: collectSubscriptions(),
+      };
+
+      try {
+        if (id) {
+          // Update basic info only (subscriptions are not updated here — future enhancement)
+          await api.updateContact(id, {
+            name:     payload.name,
+            whatsapp: payload.whatsapp,
+            email:    payload.email,
+          });
+          showToast('Contato atualizado! Para alterar assinaturas, recrie o contato.');
+        } else {
+          await api.createContact(payload);
+          showToast('Contato criado com sucesso!');
+        }
+        closeModal('modal-contact');
+        loadData();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteContact(id) {
+      if (!confirm('Remover este contato? Ele deixará de receber alertas.')) return;
+      try {
+        await api.deleteContact(id);
+        showToast('Contato removido.');
+        loadData();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

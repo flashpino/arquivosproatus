@@ -27,9 +27,10 @@ async function bootstrap() {
   // ── Express ───────────────────────────────────────────────
   const app = express();
   app.set('trust proxy', 1); // Confia no proxy reverso (EasyPanel/Caddy/Traefik)
-  app.use(helmet());
+  app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cors({ origin: process.env.CORS_ORIGIN || '*', methods: ['GET','POST','PUT','DELETE'] }));
   app.use(express.json({ limit: '100kb' }));
+  app.use(express.static(path.join(__dirname, '../public')));
 
   app.use(rateLimit({
     windowMs: 60 * 1000, max: 200,

@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta http-equiv="refresh" content="0; url=/login.html"/>
+  <title>CPD Monitor</title>
+</head>
+<body>
+  <script>
+    const token = localStorage.getItem('cpd_token');
+    window.location.href = token ? '/dashboard.html' : '/login.html';
+  </script>
+</body>
+</html>

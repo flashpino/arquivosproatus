@@ -1,0 +1,158 @@
+/* ============================================================
+   CPD Monitor — Design System (baseado no Precog Laravel)
+   ============================================================ */
+
+:root {
+  --color-primary:               #2563eb;
+  --color-industrial-gray-50:    #f8fafc;
+  --color-industrial-gray-100:   #f1f5f9;
+  --color-industrial-gray-200:   #e2e8f0;
+  --color-industrial-gray-300:   #cbd5e1;
+  --color-industrial-gray-400:   #94a3b8;
+  --color-industrial-gray-500:   #64748b;
+  --color-industrial-gray-600:   #475569;
+  --color-industrial-gray-700:   #334155;
+  --color-industrial-gray-800:   #1e293b;
+  --color-industrial-gray-900:   #0f172a;
+  --color-hmi-green:             #16a34a;
+  --color-hmi-yellow:            #ca8a04;
+  --color-hmi-red:               #dc2626;
+  --color-background-light:      #f1f5f9;
+}
+
+/* Grid background */
+.grid-bg {
+  background-image: radial-gradient(circle at 1px 1px, rgba(148,163,184,0.1) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Typography */
+.digital-font { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Animations ─────────────────────────────────────────── */
+
+@keyframes statusPulseGreen {
+  0%   { box-shadow: 0 0 0 0   rgba(22, 163, 74, 0.5); }
+  70%  { box-shadow: 0 0 0 7px rgba(22, 163, 74, 0);   }
+  100% { box-shadow: 0 0 0 0   rgba(22, 163, 74, 0);   }
+}
+@keyframes statusPulseYellow {
+  0%   { box-shadow: 0 0 0 0   rgba(202, 138, 4, 0.5); }
+  70%  { box-shadow: 0 0 0 7px rgba(202, 138, 4, 0);   }
+  100% { box-shadow: 0 0 0 0   rgba(202, 138, 4, 0);   }
+}
+.status-glow-green  { animation: statusPulseGreen  2s infinite; }
+.status-glow-yellow { animation: statusPulseYellow 2s infinite; }
+
+/* Sensor card hover lift */
+.sensor-card {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s, box-shadow 0.3s;
+}
+.sensor-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 20px -8px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.03);
+}
+
+/* Value flash on live update */
+@keyframes valueFlash {
+  0%   { color: #2563eb; text-shadow: 0 0 10px rgba(37,99,235,0.3); }
+  100% { color: inherit; text-shadow: none; }
+}
+.flash-update { animation: valueFlash 1.5s ease-out; }
+
+/* Page fade-in */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+main > * { animation: fadeInUp 0.4s ease both; }
+main > *:nth-child(2) { animation-delay: 0.05s; }
+main > *:nth-child(3) { animation-delay: 0.10s; }
+main > *:nth-child(4) { animation-delay: 0.15s; }
+
+/* Staggered list row entry */
+@keyframes slideInRow {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.staggered-row {
+  animation: slideInRow 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Table row hover with left border glow */
+.hover-glow-row {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-glow-row:hover {
+  background-color: rgba(248, 250, 252, 0.95) !important;
+  box-shadow: inset 3px 0 0 0 #2563eb;
+}
+
+/* Toast */
+.toast-flash { animation: fadeInUp 0.35s ease both; }
+
+/* Premium input focus */
+.input-premium {
+  border: 1px solid var(--color-industrial-gray-300);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #fff;
+  color: var(--color-industrial-gray-800);
+}
+.input-premium:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+select.input-premium { cursor: pointer; }
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15,23,42,0.5);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+  width: 100%; max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: fadeInUp 0.25s ease both;
+}
+.modal-box-lg { max-width: 720px; }
+
+/* Login glassmorphism */
+.glass-card {
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+/* Animated login background */
+@keyframes bgMove {
+  0%   { transform: translate(0,0)    scale(1);   }
+  33%  { transform: translate(2%,3%)  scale(1.02); }
+  66%  { transform: translate(-1%,2%) scale(0.98); }
+  100% { transform: translate(0,0)    scale(1);   }
+}
+.login-bg {
+  animation: bgMove 15s ease-in-out infinite;
+}
+
+/* Subscription card */
+.sub-card {
+  border: 1px solid var(--color-industrial-gray-200);
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  background: var(--color-industrial-gray-50);
+}

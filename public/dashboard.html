@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CPD Monitor | Dashboard</title>
+  <script>if (!localStorage.getItem('cpd_token')) { document.documentElement.style.display='none'; location.replace('/login.html'); }</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        colors: {
+          primary: '#2563eb',
+          'industrial-gray': { 50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a' },
+          'hmi-green':'#16a34a','hmi-yellow':'#ca8a04','hmi-red':'#dc2626',
+        },
+        fontFamily: { display:['Inter','sans-serif'], mono:['JetBrains Mono','monospace'] },
+      }}
+    }
+  </script>
+  <link rel="stylesheet" href="/css/app.css"/>
+</head>
+<body class="font-display min-h-screen grid-bg" style="background:#f1f5f9;color:#1e293b">
+
+  <div class="flex flex-col min-h-screen">
+    <div id="site-header"></div>
+
+    <main class="p-6 space-y-6 max-w-screen-2xl mx-auto w-full flex-1">
+
+      <!-- Stats -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-grid">
+        <div class="bg-white border rounded shadow-sm p-4" style="border-color:#e2e8f0">
+          <p class="text-xs font-bold uppercase tracking-widest mb-1" style="color:#94a3b8;font-size:9px">Clientes Ativos</p>
+          <p class="text-2xl font-bold digital-font" style="color:#1e293b" id="stat-clients">—</p>
+        </div>
+        <div class="bg-white border rounded shadow-sm p-4" style="border-color:#e2e8f0">
+          <p class="text-xs font-bold uppercase tracking-widest mb-1" style="color:#94a3b8;font-size:9px">Sensores Online</p>
+          <p class="text-2xl font-bold digital-font" style="color:#1e293b" id="stat-online">—</p>
+        </div>
+        <div class="bg-white border rounded shadow-sm p-4" style="border-color:#e2e8f0">
+          <p class="text-xs font-bold uppercase tracking-widest mb-1" style="color:#94a3b8;font-size:9px">Equipamentos Offline</p>
+          <p class="text-2xl font-bold digital-font" id="stat-offline">—</p>
+        </div>
+        <div class="bg-white border rounded shadow-sm p-4" style="border-color:#e2e8f0">
+          <p class="text-xs font-bold uppercase tracking-widest mb-1" style="color:#94a3b8;font-size:9px">Alertas (7 dias)</p>
+          <p class="text-2xl font-bold digital-font" id="stat-alerts">—</p>
+        </div>
+      </div>
+
+      <!-- Monitoring grid -->
+      <section>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-xs font-bold uppercase tracking-widest flex items-center gap-2" style="color:#1e293b">
+            <span class="material-symbols-outlined text-sm" style="color:#2563eb">sensors</span> Monitoramento de Sensores
+          </h3>
+          <span class="text-xs" style="color:#94a3b8" id="last-update"></span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="sensor-grid">
+          <div class="col-span-full flex items-center justify-center p-8" style="color:#94a3b8">
+            <span class="material-symbols-outlined animate-spin mr-2">progress_activity</span> Carregando…
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom: events + alerts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent alerts by CPD -->
+        <div class="bg-white border rounded shadow-sm p-5" style="border-color:#e2e8f0">
+          <h3 class="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 pb-2" style="color:#1e293b;border-bottom:1px solid #f1f5f9;font-size:10px">
+            <span class="material-symbols-outlined text-sm" style="color:#64748b">warning</span> CPDs com Alertas Abertos
+          </h3>
+          <ul class="space-y-2" id="cpd-alerts-list">
+            <li class="text-xs" style="color:#94a3b8">Carregando…</li>
+          </ul>
+        </div>
+
+        <!-- Quick links -->
+        <div class="bg-white border rounded shadow-sm p-5" style="border-color:#e2e8f0">
+          <h3 class="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 pb-2" style="color:#1e293b;border-bottom:1px solid #f1f5f9;font-size:10px">
+            <span class="material-symbols-outlined text-sm" style="color:#64748b">apps</span> Gestão Rápida
+          </h3>
+          <div class="grid grid-cols-2 gap-3">
+            <a href="/clientes.html" class="flex flex-col items-center gap-2 p-4 rounded border transition-all hover:border-primary hover:shadow-sm" style="border-color:#e2e8f0">
+              <span class="material-symbols-outlined" style="color:#2563eb;font-size:28px">groups</span>
+              <span class="text-xs font-bold uppercase tracking-widest" style="color:#1e293b">Clientes</span>
+            </a>
+            <a href="/locais.html" class="flex flex-col items-center gap-2 p-4 rounded border transition-all hover:border-primary hover:shadow-sm" style="border-color:#e2e8f0">
+              <span class="material-symbols-outlined" style="color:#2563eb;font-size:28px">location_on</span>
+              <span class="text-xs font-bold uppercase tracking-widest" style="color:#1e293b">Locais / CPDs</span>
+            </a>
+            <a href="/sensores.html" class="flex flex-col items-center gap-2 p-4 rounded border transition-all hover:border-primary hover:shadow-sm" style="border-color:#e2e8f0">
+              <span class="material-symbols-outlined" style="color:#2563eb;font-size:28px">sensors</span>
+              <span class="text-xs font-bold uppercase tracking-widest" style="color:#1e293b">Sensores</span>
+            </a>
+            <a href="/contatos.html" class="flex flex-col items-center gap-2 p-4 rounded border transition-all hover:border-primary hover:shadow-sm" style="border-color:#e2e8f0">
+              <span class="material-symbols-outlined" style="color:#2563eb;font-size:28px">contacts</span>
+              <span class="text-xs font-bold uppercase tracking-widest" style="color:#1e293b">Contatos</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <footer class="border-t p-4 text-center mt-auto" style="border-color:#e2e8f0;background:#fff">
+      <div class="flex justify-between items-center max-w-screen-2xl mx-auto" style="color:#94a3b8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em">
+        <span>&copy; <span id="year"></span> CPD Monitor</span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:11px">terminal</span> Admin v1.0</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/layout.js"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    function sensorCardHtml(d) {
+      const online = isOnline(d.last_seen_at);
+      const tempAlert = d.temperature != null && (d.temperature > d.temp_max || d.temperature < d.temp_min);
+      const humAlert  = d.humidity    != null && (d.humidity    > d.humidity_max || d.humidity < d.humidity_min);
+
+      const borderCls = online ? '' : 'border-hmi-yellow';
+      const borderStyle = online ? 'border-color:#cbd5e1' : 'border-color:#ca8a04';
+      const dotCls  = online ? 'bg-hmi-green status-glow-green' : 'bg-hmi-yellow status-glow-yellow';
+      const dotBg   = online ? '#16a34a' : '#ca8a04';
+      const tempColor = tempAlert ? '#dc2626' : '#1e293b';
+      const humColor  = humAlert  ? '#dc2626' : '#475569';
+
+      return `
+        <div class="sensor-card bg-white border rounded p-4 flex flex-col gap-3 shadow-sm" style="${borderStyle}">
+          <div class="flex justify-between items-start">
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-sm truncate" style="color:#1e293b">${d.client_name}</span>
+              <span class="text-xs uppercase tracking-tighter truncate" style="color:#64748b">${d.cpd_name}</span>
+              <span class="text-xs font-mono mt-0.5 truncate" style="color:#94a3b8;font-size:9px">${d.name}</span>
+            </div>
+            <div class="w-3 h-3 rounded-full flex-shrink-0 mt-0.5 ${dotCls}" style="background:${dotBg}" title="${online ? 'Online' : 'Offline'}"></div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3" style="border-top:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9;padding:12px 0">
+            <div class="flex flex-col">
+              <span class="text-xs font-bold uppercase mb-1" style="color:#94a3b8;font-size:10px">Temperatura</span>
+              <span id="temp-${d.id}" class="digital-font text-2xl font-bold leading-none" style="color:${tempColor}">
+                ${fmtTemp(d.temperature)}
+              </span>
+              <span class="text-xs mt-1" style="color:#94a3b8;font-size:9px">Lim: ${d.temp_min}–${d.temp_max} °C</span>
+            </div>
+            <div class="flex flex-col" style="border-left:1px solid #e2e8f0;padding-left:12px">
+              <span class="text-xs font-bold uppercase mb-1" style="color:#94a3b8;font-size:10px">Umidade</span>
+              <span id="hum-${d.id}" class="digital-font text-2xl font-bold leading-none" style="color:${humColor}">
+                ${fmtHum(d.humidity)}
+              </span>
+              <span class="text-xs mt-1" style="color:#94a3b8;font-size:9px">Lim: ${d.humidity_min}–${d.humidity_max} %</span>
+            </div>
+          </div>
+
+          <div class="flex justify-between text-xs font-mono" style="color:#94a3b8;font-size:10px">
+            <span>${timeAgo(d.last_seen_at)}</span>
+            <span id="status-${d.id}">${online ? '🟢 Online' : '🟡 Offline'}</span>
+          </div>
+        </div>`;
+    }
+
+    async function loadData() {
+      try {
+        const [stats, telemetry, dashboard] = await Promise.all([
+          api.getStats(),
+          api.getTelemetry(),
+          api.getDashboard(),
+        ]);
+
+        // Stats
+        const elClients = document.getElementById('stat-clients');
+        const elOnline  = document.getElementById('stat-online');
+        const elOffline = document.getElementById('stat-offline');
+        const elAlerts  = document.getElementById('stat-alerts');
+
+        elClients.textContent = stats.total_clients;
+        elOnline.innerHTML = `${stats.online_devices}<span class="text-sm ml-1" style="color:#cbd5e1">/${stats.total_devices}</span>`;
+        elOffline.textContent = stats.offline_devices;
+        elOffline.style.color = stats.offline_devices > 0 ? '#ca8a04' : '#1e293b';
+        elAlerts.textContent  = stats.recent_alerts;
+        elAlerts.style.color  = stats.recent_alerts  > 0 ? '#dc2626' : '#1e293b';
+
+        // Sensor cards
+        const grid = document.getElementById('sensor-grid');
+        if (!telemetry.length) {
+          grid.innerHTML = `<div class="col-span-full p-8 text-center text-sm" style="color:#94a3b8">
+            Nenhum sensor cadastrado. <a href="/sensores.html" style="color:#2563eb">Adicionar sensor</a>
+          </div>`;
+        } else {
+          grid.innerHTML = telemetry.map(sensorCardHtml).join('');
+        }
+
+        // CPD alerts
+        const alertsList = document.getElementById('cpd-alerts-list');
+        const withAlerts = dashboard.filter(c => c.open_alerts > 0);
+        if (!withAlerts.length) {
+          alertsList.innerHTML = `<li class="text-xs flex items-center gap-2" style="color:#16a34a">
+            <span class="material-symbols-outlined text-sm">check_circle</span> Nenhum alerta aberto.
+          </li>`;
+        } else {
+          alertsList.innerHTML = withAlerts.map(c => `
+            <li class="flex items-center justify-between p-2 rounded border-l-2" style="background:rgba(220,38,38,0.05);border-color:#dc2626">
+              <div class="flex flex-col">
+                <span class="text-xs font-bold" style="color:#1e293b">${c.client_name} — ${c.name}</span>
+                <span class="text-xs" style="color:#64748b">${c.location || '—'}</span>
+              </div>
+              <span class="text-xs font-bold digital-font px-2 py-0.5 rounded" style="background:#fee2e2;color:#dc2626">${c.open_alerts} alerta${c.open_alerts > 1 ? 's' : ''}</span>
+            </li>`).join('');
+        }
+
+        document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function flashUpdate(el, newVal) {
+      if (!el || el.textContent.trim() === newVal) return;
+      el.textContent = newVal;
+      el.classList.remove('flash-update');
+      void el.offsetWidth;
+      el.classList.add('flash-update');
+    }
+
+    async function refreshTelemetry() {
+      try {
+        const telemetry = await api.getTelemetry();
+        telemetry.forEach(d => {
+          const elTemp = document.getElementById('temp-' + d.id);
+          const elHum  = document.getElementById('hum-'  + d.id);
+          if (elTemp) flashUpdate(elTemp, fmtTemp(d.temperature));
+          if (elHum)  flashUpdate(elHum,  fmtHum(d.humidity));
+          const statusEl = document.getElementById('status-' + d.id);
+          if (statusEl) {
+            const on = isOnline(d.last_seen_at);
+            statusEl.textContent = on ? '🟢 Online' : '🟡 Offline';
+          }
+        });
+        document.getElementById('last-update').textContent = 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+      } catch {}
+    }
+
+    loadData();
+    setInterval(refreshTelemetry, 10000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CPD Monitor | Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        colors: {
+          primary: '#2563eb',
+          'industrial-gray': { 50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a' },
+          'hmi-green':'#16a34a','hmi-yellow':'#ca8a04','hmi-red':'#dc2626',
+        },
+        fontFamily: { display:['Inter','sans-serif'], mono:['JetBrains Mono','monospace'] },
+      }}
+    }
+  </script>
+  <link rel="stylesheet" href="/css/app.css"/>
+  <style>
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%,60%  { transform: translateX(-8px); }
+      40%,80%  { transform: translateX(8px); }
+    }
+    .shake { animation: shake 0.4s ease; }
+    @keyframes blob1 {
+      0%,100% { transform: translate(0,0) scale(1); }
+      50%      { transform: translate(3%,4%) scale(1.05); }
+    }
+    @keyframes blob2 {
+      0%,100% { transform: translate(0,0) scale(1); }
+      50%      { transform: translate(-3%,-4%) scale(1.05); }
+    }
+    .blob1 { animation: blob1 12s ease-in-out infinite; }
+    .blob2 { animation: blob2 14s ease-in-out infinite; }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center font-display" style="background:#0f172a;overflow:hidden">
+
+  <!-- Animated background blobs -->
+  <div class="absolute inset-0 overflow-hidden pointer-events-none">
+    <div class="blob1 absolute rounded-full opacity-20" style="width:600px;height:600px;background:radial-gradient(circle,#2563eb,transparent);top:-100px;left:-100px"></div>
+    <div class="blob2 absolute rounded-full opacity-10" style="width:500px;height:500px;background:radial-gradient(circle,#1e40af,transparent);bottom:-80px;right:-80px"></div>
+    <div class="absolute inset-0" style="background-image:radial-gradient(circle at 1px 1px,rgba(148,163,184,0.07) 1px,transparent 0);background-size:24px 24px"></div>
+  </div>
+
+  <!-- Login Card -->
+  <div id="login-card" class="glass-card relative z-10 rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+    <!-- Logo -->
+    <div class="text-center mb-8">
+      <p class="text-3xl font-bold digital-font mb-1" style="color:#1e293b">CPD<span style="color:#2563eb">Monitor</span></p>
+      <p class="text-xs font-bold uppercase tracking-widest" style="color:#64748b">Painel Administrativo</p>
+    </div>
+
+    <!-- Error alert -->
+    <div id="login-error" class="hidden mb-4 p-3 rounded flex items-center gap-2" style="background:rgba(220,38,38,0.1);border-left:3px solid #dc2626">
+      <span class="material-symbols-outlined text-sm" style="color:#dc2626">error</span>
+      <p id="login-error-msg" class="text-sm font-bold" style="color:#dc2626"></p>
+    </div>
+
+    <form id="login-form" class="space-y-5" onsubmit="handleLogin(event)">
+      <!-- Email -->
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-widest mb-1.5" style="color:#475569">E-mail</label>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm" style="color:#94a3b8">mail</span>
+          <input type="email" id="email" required placeholder="admin@empresa.com"
+                 class="input-premium pl-9"/>
+        </div>
+      </div>
+
+      <!-- Password -->
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-widest mb-1.5" style="color:#475569">Senha</label>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm" style="color:#94a3b8">lock</span>
+          <input type="password" id="password" required placeholder="••••••••"
+                 class="input-premium pl-9"/>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <button type="submit" id="login-btn"
+              class="w-full py-2.5 px-4 rounded font-bold text-sm uppercase tracking-widest text-white transition-all shadow-md"
+              style="background:#2563eb">
+        <span id="login-btn-text" class="flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-sm">login</span> Entrar
+        </span>
+      </button>
+    </form>
+
+    <p class="mt-6 text-center text-xs" style="color:#94a3b8">
+      CPD Monitor &copy; <span id="year"></span>
+    </p>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Redirect if already logged in
+    if (isLoggedIn()) window.location.href = '/dashboard.html';
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const btn      = document.getElementById('login-btn');
+      const btnText  = document.getElementById('login-btn-text');
+      const errBox   = document.getElementById('login-error');
+      const errMsg   = document.getElementById('login-error-msg');
+
+      btn.disabled = true;
+      btnText.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span> Entrando…';
+      errBox.classList.add('hidden');
+
+      try {
+        const data = await api.login(email, password);
+        setAuth(data.token, data.role, data.client_id);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        errMsg.textContent = err.message || 'Credenciais inválidas';
+        errBox.classList.remove('hidden');
+        document.getElementById('login-card').classList.add('shake');
+        setTimeout(() => document.getElementById('login-card').classList.remove('shake'), 400);
+        btn.disabled = false;
+        btnText.innerHTML = '<span class="material-symbols-outlined text-sm">login</span> Entrar';
+      }
+    }
+  </script>
+</body>
+</html>
