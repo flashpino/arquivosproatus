@@ -115,7 +115,7 @@ async function handleMessage(topic, payload) {
     clientId:    device.client_id,
     temperature,
     humidity,
-    timestamp:   data.ts ? new Date(data.ts) : new Date(),
+    timestamp:   new Date(),
   }).catch(e => logger.error('InfluxDB: erro', { error: e.message }));
 
   // Motor de regras
