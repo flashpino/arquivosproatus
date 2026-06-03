@@ -1,81 +1,91 @@
-// src/services/influx.service.js
-const { influx } = require('../../config/database');
-const logger     = require('../utils/logger');
+// src/services/influx.service.js — InfluxDB 2.x
+const { Point } = require('@influxdata/influxdb-client');
+const { getWriteApi, getQueryApi } = require('../../config/database');
+const logger = require('../utils/logger');
 
 /**
  * Grava uma leitura de sensor no InfluxDB.
- * @param {object} p
- * @param {number} p.deviceId
- * @param {number} p.cpdId
- * @param {number} p.clientId
- * @param {number} p.temperature   — graus Celsius
- * @param {number} p.humidity      — percentual relativo
- * @param {Date}   [p.timestamp]   — padrão: agora
  */
 async function writeReading({ deviceId, cpdId, clientId, temperature, humidity, timestamp }) {
-  // Heat Index (índice de calor) — fórmula de Rothfusz simplificada
-  const hi = heatIndex(temperature, humidity);
+  const hi  = heatIndex(temperature, humidity);
+  const writeApi = getWriteApi();
 
-  await influx.writePoints([
-    {
-      measurement: 'sensor_readings',
-      tags: {
-        device_id: String(deviceId),
-        cpd_id:    String(cpdId),
-        client_id: String(clientId),
-      },
-      fields: {
-        temperature,
-        humidity,
-        heat_index: hi,
-      },
-      timestamp: timestamp ? new Date(timestamp) : new Date(),
-    },
-  ]);
+  const point = new Point('sensor_readings')
+    .tag('device_id', String(deviceId))
+    .tag('cpd_id',    String(cpdId))
+    .tag('client_id', String(clientId))
+    .floatField('temperature', temperature)
+    .floatField('humidity',    humidity);
+
+  if (hi !== null) point.floatField('heat_index', hi);
+  if (timestamp)   point.timestamp(new Date(timestamp));
+
+  writeApi.writePoint(point);
+  await writeApi.close();
 
   logger.debug('InfluxDB: leitura gravada', { deviceId, cpdId, temperature, humidity });
 }
 
 /**
- * Busca as últimas N leituras de um CPD.
+ * Busca as últimas leituras de um CPD (últimos N minutos).
  */
 async function getLastReadings(cpdId, limit = 60) {
+  const queryApi = getQueryApi();
+  const bucket   = process.env.INFLUX_BUCKET;
+
   const query = `
-    SELECT mean("temperature") AS temperature,
-           mean("humidity")    AS humidity,
-           mean("heat_index")  AS heat_index
-    FROM "sensor_readings"
-    WHERE "cpd_id" = '${cpdId}'
-    GROUP BY time(1m)
-    ORDER BY time DESC
-    LIMIT ${parseInt(limit)}
+    from(bucket: "${bucket}")
+      |> range(start: -${limit}m)
+      |> filter(fn: (r) => r._measurement == "sensor_readings")
+      |> filter(fn: (r) => r.cpd_id == "${cpdId}")
+      |> filter(fn: (r) => r._field == "temperature" or r._field == "humidity")
+      |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> sort(columns: ["_time"], desc: true)
+      |> limit(n: ${parseInt(limit)})
   `;
-  return influx.query(query);
+
+  return collectRows(queryApi, query);
 }
 
 /**
  * Busca leituras de um CPD em um intervalo de tempo.
  */
 async function getReadingsByRange(cpdId, from, to) {
+  const queryApi = getQueryApi();
+  const bucket   = process.env.INFLUX_BUCKET;
+
   const query = `
-    SELECT mean("temperature") AS temperature,
-           mean("humidity")    AS humidity
-    FROM "sensor_readings"
-    WHERE "cpd_id" = '${cpdId}'
-      AND time >= '${from.toISOString()}'
-      AND time <= '${to.toISOString()}'
-    GROUP BY time(5m)
-    ORDER BY time ASC
+    from(bucket: "${bucket}")
+      |> range(start: ${from.toISOString()}, stop: ${to.toISOString()})
+      |> filter(fn: (r) => r._measurement == "sensor_readings")
+      |> filter(fn: (r) => r.cpd_id == "${cpdId}")
+      |> filter(fn: (r) => r._field == "temperature" or r._field == "humidity")
+      |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> sort(columns: ["_time"], desc: false)
   `;
-  return influx.query(query);
+
+  return collectRows(queryApi, query);
 }
 
-/**
- * Calcula o Heat Index (sensação térmica) combinando temperatura e umidade.
- * Retorna null se temperatura < 27°C (fórmula não se aplica).
- */
+// Helper: coleta todas as linhas de uma query Flux
+function collectRows(queryApi, query) {
+  return new Promise((resolve, reject) => {
+    const rows = [];
+    queryApi.queryRows(query, {
+      next(row, tableMeta) {
+        rows.push(tableMeta.toObject(row));
+      },
+      error(err) { reject(err); },
+      complete()  { resolve(rows); },
+    });
+  });
+}
+
+// Heat Index — fórmula de Rothfusz
 function heatIndex(tempC, humidity) {
-  const T = tempC * 9 / 5 + 32; // Fahrenheit
+  const T = tempC * 9 / 5 + 32;
   const R = humidity;
   if (T < 80) return null;
 
@@ -90,7 +100,7 @@ function heatIndex(tempC, humidity) {
     + 0.00085282  * T * R * R
     - 0.00000199  * T * T * R * R;
 
-  return parseFloat(((HI - 32) * 5 / 9).toFixed(2)); // volta para Celsius
+  return parseFloat(((HI - 32) * 5 / 9).toFixed(2));
 }
 
 module.exports = { writeReading, getLastReadings, getReadingsByRange };

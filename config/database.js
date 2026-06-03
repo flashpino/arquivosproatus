@@ -1,7 +1,7 @@
 // config/database.js
-const mysql2 = require('mysql2/promise');
-const Influx = require('influx');
-const logger = require('../src/utils/logger');
+const mysql2  = require('mysql2/promise');
+const { InfluxDB } = require('@influxdata/influxdb-client');
+const logger  = require('../src/utils/logger');
 
 // ── MySQL ────────────────────────────────────────────────────
 const mysqlPool = mysql2.createPool({
@@ -16,10 +16,6 @@ const mysqlPool = mysql2.createPool({
   timezone:           '-03:00',
 });
 
-mysqlPool.on('connection', () => {
-  logger.info('MySQL: nova conexão estabelecida');
-});
-
 async function testMySQL() {
   const conn = await mysqlPool.getConnection();
   await conn.ping();
@@ -27,33 +23,44 @@ async function testMySQL() {
   logger.info('MySQL: conexão OK');
 }
 
-// ── InfluxDB ─────────────────────────────────────────────────
-const influx = new Influx.InfluxDB({
-  host:     process.env.INFLUX_HOST?.replace(/https?:\/\//, '') || 'localhost',
-  port:     parseInt(process.env.INFLUX_PORT) || 8086,
-  database: process.env.INFLUX_DATABASE || 'cpd_readings',
-  username: process.env.INFLUX_USERNAME,
-  password: process.env.INFLUX_PASSWORD,
-  schema: [
-    {
-      measurement: 'sensor_readings',
-      fields: {
-        temperature: Influx.FieldType.FLOAT,
-        humidity:    Influx.FieldType.FLOAT,
-        heat_index:  Influx.FieldType.FLOAT,
-      },
-      tags: ['device_id', 'cpd_id', 'client_id'],
-    },
-  ],
+// ── InfluxDB 2.x ─────────────────────────────────────────────
+// Variáveis de ambiente necessárias:
+//   INFLUX_URL      = http://influxdb:8086
+//   INFLUX_TOKEN    = token gerado na UI do InfluxDB
+//   INFLUX_ORG      = nome da organização
+//   INFLUX_BUCKET   = nome do bucket (ex: cpd_readings)
+
+const influxClient = new InfluxDB({
+  url:   process.env.INFLUX_URL || 'http://influxdb:8086',
+  token: process.env.INFLUX_TOKEN,
 });
 
+// WriteApi e QueryApi são criados sob demanda no service
+// para evitar manter conexão desnecessária
+function getWriteApi() {
+  return influxClient.getWriteApi(
+    process.env.INFLUX_ORG,
+    process.env.INFLUX_BUCKET,
+    'ns', // precisão nanosegundos
+  );
+}
+
+function getQueryApi() {
+  return influxClient.getQueryApi(process.env.INFLUX_ORG);
+}
+
 async function testInflux() {
-  const names = await influx.getDatabaseNames();
-  if (!names.includes(process.env.INFLUX_DATABASE)) {
-    await influx.createDatabase(process.env.INFLUX_DATABASE);
-    logger.info(`InfluxDB: banco '${process.env.INFLUX_DATABASE}' criado`);
-  }
+  // Faz uma query simples para testar a conexão
+  const queryApi = getQueryApi();
+  const query = `buckets() |> filter(fn: (r) => r.name == "${process.env.INFLUX_BUCKET}")`;
+  await new Promise((resolve, reject) => {
+    queryApi.queryRows(query, {
+      next() {},
+      error(err) { reject(err); },
+      complete() { resolve(); },
+    });
+  });
   logger.info('InfluxDB: conexão OK');
 }
 
-module.exports = { mysqlPool, influx, testMySQL, testInflux };
+module.exports = { mysqlPool, influxClient, getWriteApi, getQueryApi, testMySQL, testInflux };
