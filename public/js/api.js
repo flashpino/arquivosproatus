@@ -1,6 +1,6 @@
 // public/js/api.js — cliente da API REST
 
-const API_BASE = '/api';
+const API_BASE = 'https://snipex-proatus.wwyweh.easypanel.host/api';
 
 function getToken()  { return localStorage.getItem('cpd_token'); }
 function getRole()   { return localStorage.getItem('cpd_role'); }
