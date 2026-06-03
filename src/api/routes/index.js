@@ -1,0 +1,291 @@
+// src/api/routes/index.js
+const express  = require('express');
+const bcrypt   = require('bcryptjs');
+const jwt      = require('jsonwebtoken');
+const { mysqlPool } = require('../../../config/database');
+const influxService = require('../../services/influx.service');
+const { authMiddleware, requireRole, scopeToClient } = require('../middleware/auth');
+
+const router = express.Router();
+const auth   = authMiddleware;
+
+// ============================================================
+// AUTH
+// ============================================================
+
+// POST /api/auth/login
+router.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password)
+    return res.status(400).json({ error: 'email e password obrigatórios' });
+
+  const [rows] = await mysqlPool.query(
+    'SELECT id, password_hash, role, client_id, active FROM users WHERE email = ?',
+    [email],
+  );
+  const user = rows[0];
+  if (!user || !user.active)
+    return res.status(401).json({ error: 'Credenciais inválidas' });
+
+  const valid = await bcrypt.compare(password, user.password_hash);
+  if (!valid)
+    return res.status(401).json({ error: 'Credenciais inválidas' });
+
+  await mysqlPool.query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
+
+  const token = jwt.sign(
+    { sub: user.id, role: user.role, client_id: user.client_id },
+    process.env.JWT_SECRET,
+    { expiresIn: '12h' },
+  );
+  res.json({ token, role: user.role, client_id: user.client_id });
+});
+
+// ============================================================
+// CLIENTS (superadmin)
+// ============================================================
+
+router.get('/clients', auth, requireRole('superadmin'), async (req, res) => {
+  const [rows] = await mysqlPool.query(
+    'SELECT id, name, document, email, plan, active, created_at FROM clients ORDER BY name',
+  );
+  res.json(rows);
+});
+
+router.post('/clients', auth, requireRole('superadmin'), async (req, res) => {
+  const { name, document, email, phone, plan,
+    default_temp_max, default_temp_min, default_humidity_max, default_humidity_min } = req.body;
+  if (!name) return res.status(400).json({ error: 'name obrigatório' });
+
+  const [result] = await mysqlPool.query(
+    `INSERT INTO clients (name, document, email, phone, plan,
+       default_temp_max, default_temp_min, default_humidity_max, default_humidity_min)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [name, document || null, email || null, phone || null, plan || 'standard',
+     default_temp_max ?? 27, default_temp_min ?? 16,
+     default_humidity_max ?? 70, default_humidity_min ?? 30],
+  );
+  res.status(201).json({ id: result.insertId });
+});
+
+router.put('/clients/:id', auth, requireRole('superadmin'), async (req, res) => {
+  const fields = ['name','document','email','phone','plan','active',
+    'default_temp_max','default_temp_min','default_humidity_max','default_humidity_min'];
+  const updates = Object.fromEntries(
+    Object.entries(req.body).filter(([k]) => fields.includes(k)),
+  );
+  if (!Object.keys(updates).length)
+    return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
+
+  const set = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  await mysqlPool.query(
+    `UPDATE clients SET ${set} WHERE id = ?`,
+    [...Object.values(updates), req.params.id],
+  );
+  res.json({ ok: true });
+});
+
+// ============================================================
+// CPDs
+// ============================================================
+
+router.get('/cpds', auth, scopeToClient, async (req, res) => {
+  const clientId = req.clientScope;
+  const where    = clientId ? 'WHERE c.client_id = ?' : '';
+  const params   = clientId ? [clientId] : [];
+  const [rows] = await mysqlPool.query(
+    `SELECT c.*, cl.name AS client_name FROM cpds c
+     JOIN clients cl ON cl.id = c.client_id
+     ${where} ORDER BY cl.name, c.name`,
+    params,
+  );
+  res.json(rows);
+});
+
+router.post('/cpds', auth, requireRole('superadmin','admin'), async (req, res) => {
+  const { client_id, name, location, timezone,
+    temp_max, temp_min, humidity_max, humidity_min,
+    heartbeat_interval_sec, heartbeat_timeout_sec } = req.body;
+
+  // admin só pode criar CPD para seu próprio cliente
+  const cid = req.user.role === 'superadmin' ? client_id : req.user.client_id;
+  if (!cid || !name) return res.status(400).json({ error: 'client_id e name obrigatórios' });
+
+  const [result] = await mysqlPool.query(
+    `INSERT INTO cpds (client_id, name, location, timezone,
+       temp_max, temp_min, humidity_max, humidity_min,
+       heartbeat_interval_sec, heartbeat_timeout_sec)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [cid, name, location || null, timezone || 'America/Sao_Paulo',
+     temp_max || null, temp_min || null, humidity_max || null, humidity_min || null,
+     heartbeat_interval_sec || 60, heartbeat_timeout_sec || 180],
+  );
+  res.status(201).json({ id: result.insertId });
+});
+
+// ============================================================
+// DEVICES
+// ============================================================
+
+router.get('/cpds/:cpdId/devices', auth, scopeToClient, async (req, res) => {
+  const [rows] = await mysqlPool.query(
+    `SELECT d.id, d.name, d.mqtt_client_id, d.firmware_version,
+            d.active, d.last_seen_at
+     FROM devices d
+     JOIN cpds c ON c.id = d.cpd_id
+     WHERE d.cpd_id = ? ${req.clientScope ? 'AND c.client_id = ?' : ''}`,
+    req.clientScope ? [req.params.cpdId, req.clientScope] : [req.params.cpdId],
+  );
+  res.json(rows);
+});
+
+router.post('/cpds/:cpdId/devices', auth, requireRole('superadmin','admin'), async (req, res) => {
+  const crypto = require('crypto');
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'name obrigatório' });
+
+  const mqttClientId = `esp32-cpd${req.params.cpdId}-${Date.now()}`;
+  const token        = crypto.randomBytes(32).toString('hex');
+  const tokenHash    = crypto.createHash('sha256').update(token).digest('hex');
+
+  const [result] = await mysqlPool.query(
+    'INSERT INTO devices (cpd_id, name, mqtt_client_id, token) VALUES (?, ?, ?, ?)',
+    [req.params.cpdId, name, mqttClientId, tokenHash],
+  );
+
+  // Retorna o token em texto puro UMA VEZ — não é armazenado em claro
+  res.status(201).json({
+    id:             result.insertId,
+    mqtt_client_id: mqttClientId,
+    token,          // gravar no firmware agora — não será exibido novamente
+    note:           'Guarde o token agora. Ele não será exibido novamente.',
+  });
+});
+
+// ============================================================
+// CONTACTS
+// ============================================================
+
+router.get('/contacts', auth, scopeToClient, async (req, res) => {
+  const clientId = req.clientScope || req.query.client_id;
+  const [rows] = await mysqlPool.query(
+    `SELECT c.*, GROUP_CONCAT(
+       JSON_OBJECT(
+         'id', s.id, 'cpd_id', s.cpd_id, 'alert_type', s.alert_type,
+         'channel', s.channel, 'time_from', s.time_from, 'time_to', s.time_to,
+         'weekdays_mask', s.weekdays_mask, 'cooldown_minutes', s.cooldown_minutes,
+         'severity_min', s.severity_min, 'active', s.active
+       )
+     ) AS subscriptions_json
+     FROM contacts c
+     LEFT JOIN alert_subscriptions s ON s.contact_id = c.id
+     WHERE c.client_id = ? ${clientId ? '' : 'OR 1=1'}
+     GROUP BY c.id`,
+    [clientId || req.user.client_id],
+  );
+  const contacts = rows.map(r => ({
+    ...r,
+    subscriptions: r.subscriptions_json
+      ? JSON.parse(`[${r.subscriptions_json}]`)
+      : [],
+    subscriptions_json: undefined,
+  }));
+  res.json(contacts);
+});
+
+router.post('/contacts', auth, requireRole('superadmin','admin'), async (req, res) => {
+  const { name, whatsapp, email, subscriptions = [] } = req.body;
+  const clientId = req.user.role === 'superadmin'
+    ? req.body.client_id
+    : req.user.client_id;
+  if (!name || !clientId) return res.status(400).json({ error: 'name e client_id obrigatórios' });
+
+  const conn = await mysqlPool.getConnection();
+  await conn.beginTransaction();
+  try {
+    const [result] = await conn.query(
+      'INSERT INTO contacts (client_id, name, whatsapp, email) VALUES (?, ?, ?, ?)',
+      [clientId, name, whatsapp || null, email || null],
+    );
+    const contactId = result.insertId;
+
+    for (const sub of subscriptions) {
+      await conn.query(
+        `INSERT INTO alert_subscriptions
+           (contact_id, cpd_id, alert_type, channel, time_from, time_to,
+            weekdays_mask, cooldown_minutes, severity_min)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [contactId, sub.cpd_id || null, sub.alert_type || 'all',
+         sub.channel || 'whatsapp',
+         sub.time_from || '00:00:00', sub.time_to || '23:59:59',
+         sub.weekdays_mask ?? 127, sub.cooldown_minutes ?? 30,
+         sub.severity_min || 'warning'],
+      );
+    }
+    await conn.commit();
+    res.status(201).json({ id: contactId });
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+});
+
+// ============================================================
+// LEITURAS (InfluxDB)
+// ============================================================
+
+router.get('/cpds/:cpdId/readings', auth, scopeToClient, async (req, res) => {
+  const { limit = 60, from, to } = req.query;
+
+  let readings;
+  if (from && to) {
+    readings = await influxService.getReadingsByRange(
+      req.params.cpdId, new Date(from), new Date(to),
+    );
+  } else {
+    readings = await influxService.getLastReadings(req.params.cpdId, limit);
+  }
+  res.json(readings);
+});
+
+// ============================================================
+// ALERTAS (histórico)
+// ============================================================
+
+router.get('/cpds/:cpdId/alerts', auth, scopeToClient, async (req, res) => {
+  const { limit = 50, open_only } = req.query;
+  const [rows] = await mysqlPool.query(
+    `SELECT id, alert_type, severity, value, threshold, message,
+            triggered_at, resolved_at
+     FROM alert_events
+     WHERE cpd_id = ?
+       ${open_only === '1' ? 'AND resolved_at IS NULL' : ''}
+     ORDER BY triggered_at DESC
+     LIMIT ?`,
+    [req.params.cpdId, parseInt(limit)],
+  );
+  res.json(rows);
+});
+
+// Dashboard: status atual de todos os CPDs do cliente
+router.get('/dashboard', auth, scopeToClient, async (req, res) => {
+  const clientId = req.clientScope || req.query.client_id;
+  const [cpds] = await mysqlPool.query(
+    `SELECT c.id, c.name, c.location, cl.name AS client_name,
+            (SELECT COUNT(*) FROM alert_events ae
+             WHERE ae.cpd_id = c.id AND ae.resolved_at IS NULL) AS open_alerts,
+            (SELECT d.last_seen_at FROM devices d
+             WHERE d.cpd_id = c.id AND d.active = 1
+             ORDER BY d.last_seen_at DESC LIMIT 1) AS last_seen
+     FROM cpds c
+     JOIN clients cl ON cl.id = c.client_id
+     WHERE c.active = 1 ${clientId ? 'AND c.client_id = ?' : ''}
+     ORDER BY cl.name, c.name`,
+    clientId ? [clientId] : [],
+  );
+  res.json(cpds);
+});
+
+module.exports = router;

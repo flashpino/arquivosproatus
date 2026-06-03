@@ -1,0 +1,72 @@
+version: '3.9'
+
+services:
+
+  cpd-backend:
+    build: .
+    container_name: cpd-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET}
+      MYSQL_HOST: ${MYSQL_HOST}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      INFLUX_HOST: http://${INFLUX_HOST:-influxdb}
+      INFLUX_PORT: ${INFLUX_PORT:-8086}
+      INFLUX_DATABASE: ${INFLUX_DATABASE:-cpd_readings}
+      INFLUX_USERNAME: ${INFLUX_USERNAME}
+      INFLUX_PASSWORD: ${INFLUX_PASSWORD}
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: 1883
+      AEDES_PORT: 1883
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET}
+      HEARTBEAT_CRON: "* * * * *"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    networks:
+      - cpd-net
+    volumes:
+      - cpd-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: cpd-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    networks:
+      - cpd-net
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -W 3 2>/dev/null || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  cpd-net:
+    driver: bridge
+
+volumes:
+  cpd-logs:
+  mosquitto-data:
+  mosquitto-log:
