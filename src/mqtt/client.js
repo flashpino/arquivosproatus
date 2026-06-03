@@ -5,8 +5,11 @@
 
 const mqtt          = require('mqtt');
 const deviceModel   = require('../models/device');
+const alertModel    = require('../models/alert');
 const influxService = require('../services/influx.service');
+const webhookService = require('../services/webhook.service');
 const engine        = require('../rules/engine');
+const { mysqlPool } = require('../../config/database');
 const logger        = require('../utils/logger');
 
 // Cache de devices: mqtt_client_id → info
@@ -108,6 +111,11 @@ async function handleMessage(topic, payload) {
     logger.error('last_seen: erro', { error: e.message }),
   );
 
+  // Verifica se havia comm_failure aberto — device reconectou!
+  await checkAndResolveCommFailure(device).catch(e =>
+    logger.error('comm_restored: erro', { error: e.message }),
+  );
+
   // Grava no InfluxDB
   await influxService.writeReading({
     deviceId:    device.device_id,
@@ -126,6 +134,76 @@ async function handleMessage(topic, payload) {
     temperature,
     humidity,
   }).catch(e => logger.error('Motor: erro', { error: e.message }));
+}
+
+/**
+ * Se havia um evento comm_failure aberto para o CPD deste device,
+ * resolve imediatamente e notifica os contatos elegíveis.
+ * Chamado a cada mensagem MQTT recebida — é idempotente (findOpenEvent protege).
+ */
+async function checkAndResolveCommFailure(device) {
+  const { device_id, cpd_id, cpd_name, client_id } = device;
+
+  const open = await alertModel.findOpenEvent(cpd_id, 'comm_failure');
+  if (!open) return; // nenhum evento aberto — nada a resolver
+
+  // Resolve o evento
+  await alertModel.resolveEvent(open.id);
+  logger.info('MQTT: comm_failure resolvido — device reconectou', { cpdId: cpd_id, deviceId: device_id, eventId: open.id });
+
+  // Busca nome do cliente
+  const [clientRows] = await mysqlPool.query(
+    'SELECT name FROM clients WHERE id = ?', [client_id],
+  );
+  const clientName = clientRows[0]?.name || 'Desconhecido';
+  const message = `✅ Comunicação restaurada\n[${clientName}] ${cpd_name}\nDevice reconectou ao servidor`;
+
+  // Cria evento de restauração
+  const eventId = await alertModel.createEvent({
+    cpdId: cpd_id, deviceId: device_id,
+    alertType: 'comm_restored', severity: 'warning',
+    value: null, threshold: null, message,
+  });
+
+  // Busca subscriptions para comm_restored
+  const subscriptions = await alertModel.findEligibleSubscriptions(cpd_id, 'comm_restored', 'warning');
+
+  logger.info('MQTT: notificando comm_restored', {
+    cpdId: cpd_id, total: subscriptions.length,
+    contacts: subscriptions.map(s => s.contact_name),
+  });
+
+  for (const sub of subscriptions) {
+    const destination = sub.channel === 'email' ? sub.email : sub.whatsapp;
+    if (!destination) continue;
+
+    // Verifica cooldown
+    const recent = await alertModel.findRecentDispatch(sub.contact_id, 'comm_restored', sub.cooldown_minutes);
+    if (recent) continue;
+
+    const channel = sub.channel === 'both' ? 'whatsapp' : sub.channel;
+
+    const dispatchId = await alertModel.createDispatch({
+      alertEventId:   eventId,
+      contactId:      sub.contact_id,
+      subscriptionId: sub.subscription_id,
+      channel,
+      destination,
+      status: 'pending',
+    });
+
+    await webhookService.send({
+      dispatchId, channel, destination,
+      alertType:   'comm_restored',
+      severity:    'warning',
+      value:       null,
+      threshold:   null,
+      cpdName:     cpd_name,
+      clientName,
+      contactName: sub.contact_name,
+      message,
+    });
+  }
 }
 
 async function getDevice(mqttClientId) {

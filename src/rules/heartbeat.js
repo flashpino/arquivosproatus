@@ -169,10 +169,10 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
 
   const eventId = await alertModel.createEvent({
     cpdId, deviceId, alertType: 'comm_restored',
-    severity: 'info', value: null, threshold: null, message,
+    severity: 'warning', value: null, threshold: null, message,
   });
 
-  const subscriptions = await alertModel.findEligibleSubscriptions(cpdId, 'comm_restored', 'info');
+  const subscriptions = await alertModel.findEligibleSubscriptions(cpdId, 'comm_restored', 'warning');
   for (const sub of subscriptions) {
     const destination = sub.channel === 'email' ? sub.email : sub.whatsapp;
     if (!destination) continue;
@@ -191,7 +191,7 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
       channel:     sub.channel === 'both' ? 'whatsapp' : sub.channel,
       destination,
       alertType:   'comm_restored',
-      severity:    'info',
+      severity:    'warning',
       value:       null,
       threshold:   null,
       cpdName,
