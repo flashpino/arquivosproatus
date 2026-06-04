@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "build:css": "tailwindcss -i public/css/tailwind.src.css -o public/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i public/css/tailwind.src.css -o public/css/tailwind.css --watch"
   },
   "dependencies": {
     "@influxdata/influxdb-client": "^1.35.0",
@@ -24,6 +26,8 @@
     "winston": "^3.13.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "@tailwindcss/cli": "^4.3.0",
+    "nodemon": "^3.1.4",
+    "tailwindcss": "^4.3.0"
   }
 }
