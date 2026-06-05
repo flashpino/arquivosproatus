@@ -172,7 +172,8 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
     severity: 'warning', value: null, threshold: null, message,
   });
 
-  const subscriptions = await alertModel.findEligibleSubscriptions(cpdId, 'comm_restored', 'warning');
+  // Usa subscriptions de comm_failure — quem quer saber da queda também quer saber do retorno
+  const subscriptions = await alertModel.findEligibleSubscriptions(cpdId, 'comm_failure', 'critical');
   for (const sub of subscriptions) {
     const destination = sub.channel === 'email' ? sub.email : sub.whatsapp;
     if (!destination) continue;
