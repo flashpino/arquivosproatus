@@ -54,9 +54,7 @@ async function triggerAlert({ type, value, threshold, severity, cpdId, deviceId,
   // Evita criar evento duplicado se já existe um aberto
   const existing = await alertModel.findOpenEvent(cpdId, type);
   if (existing) {
-    logger.debug('Motor: evento já aberto, pulando criação', { cpdId, type });
-    // Ainda tenta dispatch para novos contatos / cooldown expirado
-    await processDispatches(existing.id, { type, value, threshold, severity, cpdId, cpd });
+    logger.debug('Motor: evento já aberto, ignorando', { cpdId, type });
     return;
   }
 
