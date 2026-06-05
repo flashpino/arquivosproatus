@@ -51,7 +51,7 @@ async function send(p) {
         'X-Webhook-Secret':    N8N_SECRET,
         'X-Dispatch-Id':       String(p.dispatchId),
       },
-      timeout: 30_000, // 30s
+      timeout: 60_000, // 60s — n8n aguarda confirmacao do WhatsApp antes de responder
     });
 
     const n8nId = response.data?.executionId || response.headers['x-n8n-execution-id'] || null;
