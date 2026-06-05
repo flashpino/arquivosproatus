@@ -245,7 +245,7 @@ router.post('/cpds/:cpdId/devices', auth, requireRole('superadmin','admin'), asy
 
 router.get('/contacts', auth, scopeToClient, async (req, res) => {
   const clientId = req.clientScope || req.query.client_id || req.user.client_id;
-  const whereClause = clientId ? 'WHERE c.client_id = ?' : '';
+  const whereClause = clientId ? 'WHERE c.client_id = ? AND c.active = 1' : 'WHERE c.active = 1';
   const params      = clientId ? [clientId] : [];
   const [rows] = await mysqlPool.query(
     `SELECT c.*, GROUP_CONCAT(
