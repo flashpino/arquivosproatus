@@ -51,7 +51,7 @@ async function send(p) {
         'X-Webhook-Secret':    N8N_SECRET,
         'X-Dispatch-Id':       String(p.dispatchId),
       },
-      timeout: 10_000, // 10s
+      timeout: 30_000, // 30s
     });
 
     const n8nId = response.data?.executionId || response.headers['x-n8n-execution-id'] || null;

@@ -120,7 +120,8 @@ async function processDispatches(eventId, { type, value, threshold, severity, cp
         channel, destination, status: 'pending',
       });
 
-      await webhookService.send({
+      // fire-and-forget: dispatch 'pending' já bloqueia cooldown sem travar o loop
+      webhookService.send({
         dispatchId,
         channel,
         destination,
@@ -132,7 +133,7 @@ async function processDispatches(eventId, { type, value, threshold, severity, cp
         clientName:  cpd.client_name,
         contactName: sub.contact_name,
         message:     buildMessage(type, value, threshold, cpd),
-      });
+      }).catch(() => {});
     }
   }
 }

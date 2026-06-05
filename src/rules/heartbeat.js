@@ -137,7 +137,7 @@ async function triggerCommFailure({ device, secondsSinceLastSeen }) {
       dispatchId, contactName: sub.contact_name, channel, destination,
     });
 
-    await webhookService.send({
+    webhookService.send({
       dispatchId,
       channel,
       destination,
@@ -149,7 +149,7 @@ async function triggerCommFailure({ device, secondsSinceLastSeen }) {
       clientName,
       contactName: sub.contact_name,
       message,
-    });
+    }).catch(() => {});
   }
 }
 
@@ -193,7 +193,7 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
       status:         'pending',
     });
 
-    await webhookService.send({
+    webhookService.send({
       dispatchId,
       channel:     sub.channel === 'both' ? 'whatsapp' : sub.channel,
       destination,
@@ -205,7 +205,7 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
       clientName,
       contactName: sub.contact_name,
       message,
-    });
+    }).catch(() => {});
   }
 }
 
