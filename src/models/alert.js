@@ -44,8 +44,8 @@ async function findOpenEvent(cpdId, alertType) {
 async function createDispatch({ alertEventId, contactId, subscriptionId, channel, destination, status = 'pending' }) {
   const [result] = await mysqlPool.query(
     `INSERT INTO alert_dispatches
-       (alert_event_id, contact_id, subscription_id, channel, destination, status)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+       (alert_event_id, contact_id, subscription_id, channel, destination, status, dispatched_at)
+     VALUES (?, ?, ?, ?, ?, ?, NOW())`,
     [alertEventId, contactId, subscriptionId, channel, destination, status],
   );
   return result.insertId;
