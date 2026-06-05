@@ -1,13 +1,24 @@
 // src/services/webhook.service.js
-const axios      = require('axios');
-const alertModel = require('../models/alert');
-const logger     = require('../utils/logger');
+const axios          = require('axios');
+const alertModel     = require('../models/alert');
+const logger         = require('../utils/logger');
+const { enqueue }    = require('./webhook.queue');
 
 const N8N_URL    = process.env.N8N_WEBHOOK_URL;
 const N8N_SECRET = process.env.N8N_WEBHOOK_SECRET;
 
 /**
- * Envia um payload de alerta para o n8n via webhook.
+ * API pública: enfileira o envio. Todos os envios passam pela fila global
+ * (webhook.queue) para serem espaçados por WHATSAPP_SEND_GAP_MS e evitar
+ * rajada que causa banimento no WhatsApp. Retorna uma Promise que resolve
+ * quando o envio efetivamente acontece.
+ */
+async function send(p) {
+  return enqueue(() => doSend(p));
+}
+
+/**
+ * Envia um payload de alerta para o n8n via webhook (executado pela fila).
  * Atualiza o dispatch com o resultado (sent/failed).
  *
  * @param {object} p
@@ -23,7 +34,7 @@ const N8N_SECRET = process.env.N8N_WEBHOOK_SECRET;
  * @param {string} p.contactName
  * @param {string} p.message
  */
-async function send(p) {
+async function doSend(p) {
   if (!N8N_URL) {
     logger.error('Webhook: N8N_WEBHOOK_URL não configurado');
     return;

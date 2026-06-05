@@ -192,7 +192,9 @@ async function checkAndResolveCommFailure(device) {
       status: 'pending',
     });
 
-    await webhookService.send({
+    // fire-and-forget: a fila (webhook.queue) espaça os envios; não bloqueia
+    // o handler MQTT enquanto vários contatos são notificados.
+    webhookService.send({
       dispatchId, channel, destination,
       alertType:   'comm_restored',
       severity:    'warning',
@@ -202,7 +204,7 @@ async function checkAndResolveCommFailure(device) {
       clientName,
       contactName: sub.contact_name,
       message,
-    });
+    }).catch(() => {});
   }
 }
 
