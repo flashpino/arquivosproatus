@@ -4,6 +4,15 @@ const alertModel            = require('../models/alert');
 const webhookService        = require('../services/webhook.service');
 const logger                = require('../utils/logger');
 
+// Tipos de alerta que disparam ligação telefônica.
+// comm_restored e variantes de "retorno ao normal" ficam fora por decisão de negócio.
+// Para habilitar um tipo futuro, basta adicioná-lo aqui.
+const CALL_ALERT_TYPES = new Set([
+  'temp_high', 'temp_low',
+  'humidity_high', 'humidity_low',
+  'comm_failure',
+]);
+
 /**
  * Avalia uma leitura de sensor e dispara alertas se necessário.
  * Chamado pelo handler MQTT a cada mensagem recebida.
@@ -109,7 +118,24 @@ async function processDispatches(eventId, { type, value, threshold, severity, cp
       : [sub.channel];
 
     for (const channel of channels) {
-      const destination = channel === 'whatsapp' ? sub.whatsapp : sub.email;
+      // Ligação: dedup por alert_event (1x por episódio) e só para tipos elegíveis
+      if (channel === 'call') {
+        if (!CALL_ALERT_TYPES.has(type)) {
+          logger.debug('Motor: ligação não elegível para este tipo', { type });
+          continue;
+        }
+        const alreadyCalled = await alertModel.hasCallDispatch(eventId, sub.contact_id);
+        if (alreadyCalled) {
+          logger.debug('Motor: ligação já realizada neste evento', {
+            eventId, contactId: sub.contact_id,
+          });
+          continue;
+        }
+      }
+
+      const destination = channel === 'whatsapp' ? sub.whatsapp
+                        : channel === 'email'    ? sub.email
+                        : sub.whatsapp; // call usa o número WhatsApp (mesmo número Twilio)
       if (!destination) continue;
 
       const dispatchId = await alertModel.createDispatch({

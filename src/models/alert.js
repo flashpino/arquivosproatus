@@ -67,6 +67,24 @@ async function updateDispatch(dispatchId, { status, n8nWebhookId, errorMessage, 
 }
 
 /**
+ * Verifica se já existe um dispatch de ligação (call) para um evento + contato.
+ * Ligações têm dedup por alert_event_id — somente 1 por episódio, independente
+ * de cooldown ou quantas leituras passem enquanto o evento fica aberto.
+ */
+async function hasCallDispatch(alertEventId, contactId) {
+  const [rows] = await mysqlPool.query(
+    `SELECT id FROM alert_dispatches
+     WHERE alert_event_id = ?
+       AND contact_id     = ?
+       AND channel        = 'call'
+       AND status        IN ('pending', 'sent', 'failed')
+     LIMIT 1`,
+    [alertEventId, contactId],
+  );
+  return rows.length > 0;
+}
+
+/**
  * Retorna o último dispatch ENVIADO para um contato + tipo de alerta
  * dentro do período de cooldown. Usado para suprimir envios repetidos.
  */
@@ -132,5 +150,6 @@ module.exports = {
   createDispatch,
   updateDispatch,
   findRecentDispatch,
+  hasCallDispatch,
   findEligibleSubscriptions,
 };

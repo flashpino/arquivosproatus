@@ -110,19 +110,30 @@ async function triggerCommFailure({ device, secondsSinceLastSeen }) {
   }
 
   for (const sub of subscriptions) {
-    const destination = sub.channel === 'email' ? sub.email : sub.whatsapp;
+    const channel = sub.channel === 'both' ? 'whatsapp' : sub.channel;
+
+    // Ligação: dedup por alert_event (1x por episódio)
+    if (channel === 'call') {
+      const alreadyCalled = await alertModel.hasCallDispatch(eventId, sub.contact_id);
+      if (alreadyCalled) {
+        logger.info('Heartbeat: ligação já realizada neste evento', {
+          eventId, contactId: sub.contact_id,
+        });
+        continue;
+      }
+    } else {
+      const recent = await alertModel.findRecentDispatch(sub.contact_id, 'comm_failure', sub.cooldown_minutes);
+      if (recent) {
+        logger.info('Heartbeat: cooldown ativo para contato', { contactId: sub.contact_id, cooldown: sub.cooldown_minutes });
+        continue;
+      }
+    }
+
+    const destination = channel === 'email' ? sub.email : sub.whatsapp;
     if (!destination) {
       logger.warn('Heartbeat: contato sem número/email configurado', { contactId: sub.contact_id, contactName: sub.contact_name });
       continue;
     }
-
-    const recent = await alertModel.findRecentDispatch(sub.contact_id, 'comm_failure', sub.cooldown_minutes);
-    if (recent) {
-      logger.info('Heartbeat: cooldown ativo para contato', { contactId: sub.contact_id, cooldown: sub.cooldown_minutes });
-      continue;
-    }
-
-    const channel = sub.channel === 'both' ? 'whatsapp' : sub.channel;
 
     const dispatchId = await alertModel.createDispatch({
       alertEventId:   eventId,
