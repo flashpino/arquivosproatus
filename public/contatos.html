@@ -181,6 +181,11 @@
           <td class="p-4">${activeBadge(c.active)}</td>
           <td class="p-4 text-right">
             <div class="flex items-center justify-end gap-2">
+              <button onclick="toggleActive(${c.id}, ${c.active ? 0 : 1})" class="p-1 transition-colors"
+                      style="color:${c.active ? '#f59e0b' : '#16a34a'}"
+                      title="${c.active ? 'Desativar' : 'Ativar'}">
+                <span class="material-symbols-outlined text-sm">${c.active ? 'pause_circle' : 'play_circle'}</span>
+              </button>
               <button onclick="openEditModal(${c.id})" class="p-1 transition-colors" style="color:#94a3b8" title="Editar">
                 <span class="material-symbols-outlined text-sm">edit</span>
               </button>
@@ -403,6 +408,16 @@
         showToast(err.message, 'error');
       } finally {
         btn.disabled = false;
+      }
+    }
+
+    async function toggleActive(id, newActive) {
+      try {
+        await api.updateContact(id, { active: newActive });
+        showToast(newActive ? 'Contato ativado.' : 'Contato desativado.');
+        loadData();
+      } catch (err) {
+        showToast(err.message, 'error');
       }
     }
 
