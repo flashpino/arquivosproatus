@@ -178,6 +178,12 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
     const destination = sub.channel === 'email' ? sub.email : sub.whatsapp;
     if (!destination) continue;
 
+    const recent = await alertModel.findRecentDispatch(sub.contact_id, 'comm_restored', sub.cooldown_minutes);
+    if (recent) {
+      logger.info('Heartbeat: cooldown ativo para comm_restored', { contactId: sub.contact_id });
+      continue;
+    }
+
     const dispatchId = await alertModel.createDispatch({
       alertEventId:   eventId,
       contactId:      sub.contact_id,

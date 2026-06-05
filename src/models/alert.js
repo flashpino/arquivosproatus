@@ -77,7 +77,7 @@ async function findRecentDispatch(contactId, alertType, cooldownMinutes) {
      JOIN alert_events     e ON e.id = d.alert_event_id
      WHERE d.contact_id = ?
        AND e.alert_type = ?
-       AND d.status     = 'sent'
+       AND d.status     IN ('sent', 'failed', 'pending')
        AND d.dispatched_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
      ORDER BY d.dispatched_at DESC
      LIMIT 1`,
