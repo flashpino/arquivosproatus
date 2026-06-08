@@ -173,7 +173,7 @@ router.get('/cpds/:cpdId/devices', auth, scopeToClient, async (req, res) => {
             d.active, d.last_seen_at
      FROM devices d
      JOIN cpds c ON c.id = d.cpd_id
-     WHERE d.cpd_id = ? ${req.clientScope ? 'AND c.client_id = ?' : ''}`,
+     WHERE d.cpd_id = ? AND d.active = 1 ${req.clientScope ? 'AND c.client_id = ?' : ''}`,
     req.clientScope ? [req.params.cpdId, req.clientScope] : [req.params.cpdId],
   );
   res.json(rows);
