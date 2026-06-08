@@ -73,3 +73,14 @@ bootstrap().catch(err => {
   logger.error('Erro fatal', { error: err.message, stack: err.stack });
   process.exit(1);
 });
+
+// Encerramento gracioso. Em container, o Node roda como PID 1 e, sem um
+// handler próprio, IGNORA o SIGTERM — fazendo a instância antiga sobreviver
+// ao deploy e rodar o heartbeat/MQTT em paralelo (instâncias zumbis).
+// Registrar o handler garante que ela saia imediatamente ao receber o sinal.
+function shutdown(signal) {
+  logger.info(`Sinal ${signal} recebido — encerrando processo`);
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
