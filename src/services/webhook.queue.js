@@ -29,11 +29,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function enqueue(task) {
   return new Promise((resolve) => {
     queue.push({ task, resolve });
-    if (!processing) process();
+    if (!processing) drainQueue();
   });
 }
 
-async function process() {
+async function drainQueue() {
   processing = true;
   while (queue.length) {
     const { task, resolve } = queue.shift();
