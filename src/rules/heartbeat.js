@@ -3,7 +3,6 @@ const cron          = require('node-cron');
 const deviceModel   = require('../models/device');
 const alertModel    = require('../models/alert');
 const webhookService = require('../services/webhook.service');
-const sseService    = require('../services/sse.service');
 const { mysqlPool } = require('../../config/database');
 const logger        = require('../utils/logger');
 
@@ -58,7 +57,6 @@ async function checkHeartbeats() {
         cpdId: cpd_id, secondsSince: Math.round(secondsSinceLastSeen),
       });
 
-      sseService.broadcast('telemetry', { id: device_id, status: 'offline' }, client_id);
       await triggerCommFailure({ device, secondsSinceLastSeen });
     } else {
       await resolveCommFailure(cpd_id, device_id, cpd_name, client_id);
@@ -173,8 +171,6 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
   if (!open) return;
 
   await alertModel.resolveEvent(open.id);
-  await deviceModel.resetConnectedSince(deviceId);
-  sseService.broadcast('telemetry', { id: deviceId, status: 'online' }, clientId);
   logger.info('Heartbeat: comunicação restaurada', { cpdId, deviceId });
 
   // Notifica restauração
