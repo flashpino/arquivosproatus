@@ -212,8 +212,32 @@ router.put('/devices/:id', auth, requireRole('superadmin','admin'), async (req, 
 });
 
 router.delete('/devices/:id', auth, requireRole('superadmin','admin'), async (req, res) => {
-  await mysqlPool.query('UPDATE devices SET active = 0 WHERE id = ?', [req.params.id]);
-  res.json({ ok: true });
+  const deviceId = req.params.id;
+  const conn = await mysqlPool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) dispatches dos eventos de alerta deste device
+    await conn.query(
+      `DELETE disp FROM alert_dispatches disp
+       JOIN alert_events ev ON ev.id = disp.alert_event_id
+       WHERE ev.device_id = ?`,
+      [deviceId],
+    );
+    // 2) eventos de alerta deste device
+    await conn.query('DELETE FROM alert_events WHERE device_id = ?', [deviceId]);
+    // 3) o device de fato
+    const [result] = await conn.query('DELETE FROM devices WHERE id = ?', [deviceId]);
+
+    await conn.commit();
+    // OBS: leituras no InfluxDB (tag device_id) NÃO são removidas aqui.
+    res.json({ ok: true, deleted: result.affectedRows });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ error: 'Falha ao excluir o sensor', detail: err.message });
+  } finally {
+    conn.release();
+  }
 });
 
 router.post('/cpds/:cpdId/devices', auth, requireRole('superadmin','admin'), async (req, res) => {
