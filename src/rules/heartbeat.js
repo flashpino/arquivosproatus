@@ -3,6 +3,7 @@ const cron          = require('node-cron');
 const deviceModel   = require('../models/device');
 const alertModel    = require('../models/alert');
 const webhookService = require('../services/webhook.service');
+const sseService    = require('../services/sse.service');
 const { mysqlPool } = require('../../config/database');
 const logger        = require('../utils/logger');
 
@@ -57,6 +58,7 @@ async function checkHeartbeats() {
         cpdId: cpd_id, secondsSince: Math.round(secondsSinceLastSeen),
       });
 
+      sseService.broadcast('telemetry', { id: device_id, status: 'offline' }, client_id);
       await triggerCommFailure({ device, secondsSinceLastSeen });
     } else {
       await resolveCommFailure(cpd_id, device_id, cpd_name, client_id);
@@ -67,13 +69,6 @@ async function checkHeartbeats() {
 async function triggerCommFailure({ device, secondsSinceLastSeen }) {
   const { device_id, cpd_id, cpd_name } = device;
 
-  // Evita duplicar evento se já existe um aberto
-  const existing = await alertModel.findOpenEvent(cpd_id, 'comm_failure');
-  if (existing) {
-    logger.info('Heartbeat: comm_failure já registrado, ignorando duplicata', { cpdId: cpd_id, eventId: existing.id });
-    return;
-  }
-
   // Busca nome do cliente
   const [clientRows] = await mysqlPool.query(
     'SELECT cl.name AS client_name FROM cpds c JOIN clients cl ON cl.id = c.client_id WHERE c.id = ?',
@@ -83,17 +78,26 @@ async function triggerCommFailure({ device, secondsSinceLastSeen }) {
 
   const message = `🔴 FALHA DE COMUNICAÇÃO\n[${clientName}] ${cpd_name}\nÚltimo sinal há ${Math.round(secondsSinceLastSeen / 60)} min`;
 
-  const eventId = await alertModel.createEvent({
-    cpdId:     cpd_id,
-    deviceId:  device_id,
-    alertType: 'comm_failure',
-    severity:  'critical',
-    value:     null,
-    threshold: null,
-    message,
-  });
-
-  logger.warn('Heartbeat: evento comm_failure criado', { eventId, cpdId: cpd_id, deviceId: device_id });
+  // Reaproveita o evento aberto (se houver) em vez de abandonar a notificação.
+  // Assim o reenvio passa a ser controlado pelo cooldown de cada contato
+  // (findRecentDispatch), reavisando a cada `cooldown_minutes` enquanto offline.
+  const existing = await alertModel.findOpenEvent(cpd_id, 'comm_failure');
+  let eventId;
+  if (existing) {
+    eventId = existing.id;
+    logger.info('Heartbeat: comm_failure ainda aberto, reavaliando notificações (cooldown)', { cpdId: cpd_id, eventId });
+  } else {
+    eventId = await alertModel.createEvent({
+      cpdId:     cpd_id,
+      deviceId:  device_id,
+      alertType: 'comm_failure',
+      severity:  'critical',
+      value:     null,
+      threshold: null,
+      message,
+    });
+    logger.warn('Heartbeat: evento comm_failure criado', { eventId, cpdId: cpd_id, deviceId: device_id });
+  }
 
   // Busca subscriptions para comm_failure
   const subscriptions = await alertModel.findEligibleSubscriptions(cpd_id, 'comm_failure', 'critical');
@@ -169,6 +173,8 @@ async function resolveCommFailure(cpdId, deviceId, cpdName, clientId) {
   if (!open) return;
 
   await alertModel.resolveEvent(open.id);
+  await deviceModel.resetConnectedSince(deviceId);
+  sseService.broadcast('telemetry', { id: deviceId, status: 'online' }, clientId);
   logger.info('Heartbeat: comunicação restaurada', { cpdId, deviceId });
 
   // Notifica restauração

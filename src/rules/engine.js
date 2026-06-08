@@ -38,12 +38,20 @@ async function evaluate(reading) {
   }
   const th = rows[0];
 
-  // Avalia cada condição
+  // Busca deltas do device (sobrescreve o padrão do cliente se definido)
+  const [devRows] = await mysqlPool.query(
+    'SELECT severity_warning_delta, severity_critical_delta FROM devices WHERE id = ?',
+    [deviceId],
+  );
+  const dev = devRows[0] || {};
+  const wDelta = parseFloat(dev.severity_warning_delta)  || 2;
+  const cDelta = parseFloat(dev.severity_critical_delta) || 5;
+
   const checks = [
-    { type: 'temp_high',     breach: temperature > th.temp_max,     value: temperature, threshold: th.temp_max,     severity: getSeverity(temperature, th.temp_max,  'high') },
-    { type: 'temp_low',      breach: temperature < th.temp_min,     value: temperature, threshold: th.temp_min,     severity: getSeverity(temperature, th.temp_min,  'low')  },
-    { type: 'humidity_high', breach: humidity    > th.humidity_max, value: humidity,    threshold: th.humidity_max, severity: getSeverity(humidity,    th.humidity_max, 'high') },
-    { type: 'humidity_low',  breach: humidity    < th.humidity_min, value: humidity,    threshold: th.humidity_min, severity: getSeverity(humidity,    th.humidity_min, 'low')  },
+    { type: 'temp_high',     breach: temperature > th.temp_max,     value: temperature, threshold: th.temp_max,     severity: getSeverity(temperature, th.temp_max,     'high', wDelta, cDelta) },
+    { type: 'temp_low',      breach: temperature < th.temp_min,     value: temperature, threshold: th.temp_min,     severity: getSeverity(temperature, th.temp_min,     'low',  wDelta, cDelta) },
+    { type: 'humidity_high', breach: humidity    > th.humidity_max, value: humidity,    threshold: th.humidity_max, severity: getSeverity(humidity,    th.humidity_max, 'high', wDelta, cDelta) },
+    { type: 'humidity_low',  breach: humidity    < th.humidity_min, value: humidity,    threshold: th.humidity_min, severity: getSeverity(humidity,    th.humidity_min, 'low',  wDelta, cDelta) },
   ];
 
   for (const check of checks) {
@@ -206,13 +214,10 @@ function isInTimeWindow(now, timeFrom, timeTo, weekdaysMask, timezone) {
 /**
  * Calcula severidade baseada no desvio do threshold.
  */
-function getSeverity(value, threshold, direction) {
-  const delta = direction === 'high'
-    ? value - threshold
-    : threshold - value;
-
-  if (delta >= 5) return 'critical';
-  if (delta >= 2) return 'warning';
+function getSeverity(value, threshold, direction, warningDelta = 2, criticalDelta = 5) {
+  const delta = direction === 'high' ? value - threshold : threshold - value;
+  if (delta >= criticalDelta) return 'critical';
+  if (delta >= warningDelta)  return 'warning';
   return 'info';
 }
 
